@@ -1,0 +1,113 @@
+#include <AccelStepper.h>
+#include <LiquidCrystal.h>
+
+// Pines para el LCD (ajustar según tu shield o módulo)
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
+
+// Pines de los motores y fines de carrera
+#define DIR_AZ 2
+#define STEP_AZ 3
+#define DIR_ALT 4
+#define STEP_ALT 5
+#define ENDSTOP_AZ 10
+#define ENDSTOP_ALT 11
+
+// Configuración de motores
+AccelStepper motorAz(AccelStepper::DRIVER, STEP_AZ, DIR_AZ);
+AccelStepper motorAlt(AccelStepper::DRIVER, STEP_ALT, DIR_ALT);
+
+// Botones del shield LCD Keypad
+#define BTN_RIGHT 0
+#define BTN_UP 1
+#define BTN_DOWN 2
+#define BTN_LEFT 3
+#define BTN_SELECT 4
+#define BTN_NONE -1
+
+// Variables de estado
+int menu = 0;
+bool homingDone = false;
+
+void setup() {
+    Serial.begin(9600);
+    lcd.begin(16, 2);
+    lcd.print("Montura GOTO");
+    
+    pinMode(ENDSTOP_AZ, INPUT_PULLUP);
+    pinMode(ENDSTOP_ALT, INPUT_PULLUP);
+    
+    motorAz.setMaxSpeed(1000);
+    motorAz.setAcceleration(500);
+    motorAlt.setMaxSpeed(1000);
+    motorAlt.setAcceleration(500);
+}
+
+void loop() {
+    if (!homingDone) {
+        realizarHoming();
+    }
+    
+    int btn = leerBoton();
+    if (btn == BTN_RIGHT) moverMotor(motorAz, 1);
+    if (btn == BTN_LEFT) moverMotor(motorAz, -1);
+    if (btn == BTN_UP) moverMotor(motorAlt, 1);
+    if (btn == BTN_DOWN) moverMotor(motorAlt, -1);
+    if (btn == BTN_SELECT) mostrarMenu();
+    
+    if (Serial.available()) {
+        char comando = Serial.read();
+        procesarComandoLX200(comando);
+    }
+}
+
+void realizarHoming() {
+    lcd.setCursor(0, 1);
+    lcd.print("Homing...");
+    
+    // Mover Azimuth hasta el fin de carrera
+    while (digitalRead(ENDSTOP_AZ) == HIGH) {
+        motorAz.move(-1);
+        motorAz.run();
+    }
+    motorAz.setCurrentPosition(0);
+    
+    // Mover Altitud hasta el fin de carrera
+    while (digitalRead(ENDSTOP_ALT) == HIGH) {
+        motorAlt.move(-1);
+        motorAlt.run();
+    }
+    motorAlt.setCurrentPosition(0);
+    
+    homingDone = true;
+    lcd.clear();
+    lcd.print("Listo");
+}
+
+void moverMotor(AccelStepper &motor, int dir) {
+    motor.move(dir * 100);
+    motor.runToPosition();
+}
+
+void mostrarMenu() {
+    lcd.clear();
+    lcd.print("Menu en desarrollo");
+    delay(1000);
+}
+
+void procesarComandoLX200(char comando) {
+    if (comando == 'M') {
+        Serial.println("#ACK");
+    }
+    // Agregar más comandos LX200 aquí
+}
+
+int leerBoton() {
+    int lectura = analogRead(A0);
+    if (lectura < 50) return BTN_RIGHT;
+    if (lectura < 250) return BTN_UP;
+    if (lectura < 450) return BTN_DOWN;
+    if (lectura < 650) return BTN_LEFT;
+    if (lectura < 850) return BTN_SELECT;
+    return BTN_NONE;
+}
+
